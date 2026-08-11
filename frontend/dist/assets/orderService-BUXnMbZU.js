@@ -1,0 +1,1 @@
+import{f as r}from"./index-rGFm-eaD.js";const o={createOrder:e=>r.post("/orders/create",e),getOrder:e=>r.get(`/orders/${e}`),cancelOrder:e=>r.put(`/orders/${e}/cancel`),buyAgain:e=>r.post(`/orders/${e}/buy-again`),getShippingEstimate:e=>r.get(`/orders/${e}/shipping-estimate`)};export{o};

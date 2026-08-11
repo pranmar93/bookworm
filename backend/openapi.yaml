@@ -1,0 +1,953 @@
+openapi: 3.0.3
+info:
+  title: BookWorm API
+  description: |
+    Full-stack online bookstore REST API.
+    
+    ## Authentication
+    Most endpoints require a Bearer JWT token in the `Authorization` header.
+    
+    ```
+    Authorization: Bearer <token>
+    ```
+    
+    ## Getting Started
+    1. Register at `POST /auth/register` or login at `POST /auth/login`
+    2. Copy the returned `token`
+    3. Click "Authorize" above and paste: `Bearer <token>`
+  version: 1.0.0
+  contact:
+    name: BookWorm API Support
+
+servers:
+  - url: http://localhost:5000/api/v1
+    description: Development Server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+    User:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        phone_number:
+          type: string
+        is_guest:
+          type: boolean
+        gift_points:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+
+    Book:
+      type: object
+      properties:
+        book_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        author_name:
+          type: string
+        category_name:
+          type: string
+        price:
+          type: number
+        format:
+          type: string
+          enum: [Paperback, Hardcover, eBook]
+        isbn:
+          type: string
+        description:
+          type: string
+        cover_image_url:
+          type: string
+        stock_quantity:
+          type: integer
+        is_bestseller:
+          type: boolean
+        is_new_launch:
+          type: boolean
+        is_recommended:
+          type: boolean
+        avg_rating:
+          type: number
+        review_count:
+          type: integer
+
+    CartItem:
+      type: object
+      properties:
+        cart_item_id:
+          type: string
+          format: uuid
+        book_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        price:
+          type: number
+        quantity:
+          type: integer
+        cover_image_url:
+          type: string
+
+    Order:
+      type: object
+      properties:
+        order_id:
+          type: string
+          format: uuid
+        subtotal:
+          type: number
+        tax_amount:
+          type: number
+        discount_amount:
+          type: number
+        delivery_charges:
+          type: number
+        grand_total:
+          type: number
+        order_status:
+          type: string
+          enum: [pending, confirmed, shipped, delivered, cancelled]
+        payment_status:
+          type: string
+          enum: [pending, completed, failed, refunded]
+        estimated_delivery_date:
+          type: string
+          format: date
+        can_cancel:
+          type: boolean
+
+    Address:
+      type: object
+      properties:
+        address_id:
+          type: string
+          format: uuid
+        first_name:
+          type: string
+        last_name:
+          type: string
+        address_line:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        pin_code:
+          type: string
+        country:
+          type: string
+        phone_number:
+          type: string
+        is_default:
+          type: boolean
+
+    Review:
+      type: object
+      properties:
+        review_id:
+          type: string
+          format: uuid
+        book_id:
+          type: string
+          format: uuid
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        review_text:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ── Authentication ──────────────────────────────────────────────────
+  /auth/register:
+    post:
+      tags: [Authentication]
+      summary: Register a new user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, first_name, last_name]
+              properties:
+                email:
+                  type: string
+                  example: john@example.com
+                password:
+                  type: string
+                  minLength: 6
+                first_name:
+                  type: string
+                last_name:
+                  type: string
+                phone_number:
+                  type: string
+      responses:
+        '201':
+          description: User registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+        '409':
+          description: Email already registered
+
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Login with email and password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  example: alice@example.com
+                password:
+                  type: string
+                  example: password123
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: Invalid credentials
+
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Logout (client discards JWT)
+      responses:
+        '200':
+          description: Logged out
+
+  /auth/guest-login:
+    post:
+      tags: [Authentication]
+      summary: Create a guest session
+      security: []
+      responses:
+        '201':
+          description: Guest session created
+
+  /auth/verify:
+    get:
+      tags: [Authentication]
+      summary: Verify JWT token validity
+      responses:
+        '200':
+          description: Token is valid
+        '401':
+          description: Invalid token
+
+  # ── Users ───────────────────────────────────────────────────────────
+  /users/profile:
+    get:
+      tags: [Users]
+      summary: Get current user profile
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+    put:
+      tags: [Users]
+      summary: Update user profile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                first_name:
+                  type: string
+                last_name:
+                  type: string
+                email:
+                  type: string
+                phone_number:
+                  type: string
+      responses:
+        '200':
+          description: Profile updated
+
+  /users/order-history:
+    get:
+      tags: [Users]
+      summary: Get order history with pagination
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Order history
+
+  /users/wishlist:
+    get:
+      tags: [Users]
+      summary: Get user wishlist
+      responses:
+        '200':
+          description: Wishlist items
+    post:
+      tags: [Users]
+      summary: Add book to wishlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [book_id]
+              properties:
+                book_id:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Added to wishlist
+
+  /users/wishlist/{bookId}:
+    delete:
+      tags: [Users]
+      summary: Remove book from wishlist
+      parameters:
+        - in: path
+          name: bookId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Removed from wishlist
+
+  /users/gift-points:
+    get:
+      tags: [Users]
+      summary: Get available gift points
+      responses:
+        '200':
+          description: Gift points balance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  gift_points:
+                    type: integer
+
+  # ── Books ───────────────────────────────────────────────────────────
+  /books:
+    get:
+      tags: [Books]
+      summary: Get all books with optional filters
+      security: []
+      parameters:
+        - in: query
+          name: category
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: bestseller
+          schema:
+            type: boolean
+        - in: query
+          name: new_launch
+          schema:
+            type: boolean
+        - in: query
+          name: recommended
+          schema:
+            type: boolean
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [price_asc, price_desc, bestseller]
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: limit
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: List of books with pagination
+
+  /books/search:
+    get:
+      tags: [Books]
+      summary: Search books by title or author
+      security: []
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Search results
+
+  /books/{bookId}:
+    get:
+      tags: [Books]
+      summary: Get book details
+      security: []
+      parameters:
+        - in: path
+          name: bookId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Book details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Book'
+        '404':
+          description: Book not found
+
+  /books/{bookId}/related:
+    get:
+      tags: [Books]
+      summary: Get related books
+      security: []
+      parameters:
+        - in: path
+          name: bookId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Related books
+
+  /books/{bookId}/reviews:
+    get:
+      tags: [Books]
+      summary: Get book reviews
+      security: []
+      parameters:
+        - in: path
+          name: bookId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Book reviews
+
+  # ── Categories ──────────────────────────────────────────────────────
+  /categories:
+    get:
+      tags: [Categories]
+      summary: Get all categories
+      security: []
+      responses:
+        '200':
+          description: List of categories
+
+  /categories/{categoryId}/books:
+    get:
+      tags: [Categories]
+      summary: Get books by category
+      security: []
+      parameters:
+        - in: path
+          name: categoryId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Books in category
+
+  # ── Authors ─────────────────────────────────────────────────────────
+  /authors/{authorId}:
+    get:
+      tags: [Authors]
+      summary: Get author details
+      security: []
+      parameters:
+        - in: path
+          name: authorId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Author details
+
+  /authors/{authorId}/books:
+    get:
+      tags: [Authors]
+      summary: Get books by author
+      security: []
+      parameters:
+        - in: path
+          name: authorId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Author's books
+
+  # ── Cart ────────────────────────────────────────────────────────────
+  /cart:
+    get:
+      tags: [Cart]
+      summary: Get current cart
+      responses:
+        '200':
+          description: Cart with items and summary
+    delete:
+      tags: [Cart]
+      summary: Clear entire cart
+      responses:
+        '200':
+          description: Cart cleared
+
+  /cart/items:
+    post:
+      tags: [Cart]
+      summary: Add item to cart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [book_id, quantity]
+              properties:
+                book_id:
+                  type: string
+                  format: uuid
+                quantity:
+                  type: integer
+                  minimum: 1
+                  maximum: 10
+      responses:
+        '201':
+          description: Item added
+
+  /cart/items/{cartItemId}:
+    put:
+      tags: [Cart]
+      summary: Update cart item quantity
+      parameters:
+        - in: path
+          name: cartItemId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                quantity:
+                  type: integer
+                  minimum: 1
+      responses:
+        '200':
+          description: Cart item updated
+    delete:
+      tags: [Cart]
+      summary: Remove item from cart
+      parameters:
+        - in: path
+          name: cartItemId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Item removed
+
+  # ── Addresses ───────────────────────────────────────────────────────
+  /addresses:
+    get:
+      tags: [Addresses]
+      summary: Get all user addresses
+      responses:
+        '200':
+          description: List of addresses
+    post:
+      tags: [Addresses]
+      summary: Create new address
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Address'
+      responses:
+        '201':
+          description: Address created
+
+  /addresses/{addressId}:
+    put:
+      tags: [Addresses]
+      summary: Update address
+      parameters:
+        - in: path
+          name: addressId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Address updated
+    delete:
+      tags: [Addresses]
+      summary: Delete address
+      parameters:
+        - in: path
+          name: addressId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Address deleted
+
+  /addresses/{addressId}/set-default:
+    put:
+      tags: [Addresses]
+      summary: Set address as default
+      parameters:
+        - in: path
+          name: addressId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Default address updated
+
+  # ── Orders ──────────────────────────────────────────────────────────
+  /orders/create:
+    post:
+      tags: [Orders]
+      summary: Create order from cart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [address_id]
+              properties:
+                address_id:
+                  type: string
+                  format: uuid
+                gift_points_to_redeem:
+                  type: integer
+                  minimum: 0
+      responses:
+        '201':
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+
+  /orders/{orderId}:
+    get:
+      tags: [Orders]
+      summary: Get order details
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Order details with items
+
+  /orders/{orderId}/cancel:
+    put:
+      tags: [Orders]
+      summary: Cancel order (within 48 hours)
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Order cancelled
+        '400':
+          description: Cannot cancel after 48 hours
+
+  /orders/{orderId}/buy-again:
+    post:
+      tags: [Orders]
+      summary: Add past order items to cart
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Items added to cart
+
+  /orders/{orderId}/shipping-estimate:
+    get:
+      tags: [Orders]
+      summary: Get delivery estimate for an order
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Shipping estimate
+
+  # ── Payments ────────────────────────────────────────────────────────
+  /payments/initiate:
+    post:
+      tags: [Payments]
+      summary: Initiate payment for an order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [order_id, payment_method]
+              properties:
+                order_id:
+                  type: string
+                  format: uuid
+                payment_method:
+                  type: string
+                  enum: [credit_card, debit_card, upi, wallet]
+                card_last_four:
+                  type: string
+                  minLength: 4
+                  maxLength: 4
+      responses:
+        '201':
+          description: Payment initiated
+
+  /payments/confirm:
+    post:
+      tags: [Payments]
+      summary: Confirm payment (mock gateway)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [payment_id]
+              properties:
+                payment_id:
+                  type: string
+                  format: uuid
+                simulate_failure:
+                  type: boolean
+                  default: false
+      responses:
+        '200':
+          description: Payment result
+
+  /payments/refund:
+    post:
+      tags: [Payments]
+      summary: Process a refund
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [payment_id]
+              properties:
+                payment_id:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Refund processed
+
+  /payments/{paymentId}/status:
+    get:
+      tags: [Payments]
+      summary: Get payment status
+      parameters:
+        - in: path
+          name: paymentId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Payment status
+
+  # ── Reviews ─────────────────────────────────────────────────────────
+  /reviews:
+    post:
+      tags: [Reviews]
+      summary: Submit a review
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [book_id, rating]
+              properties:
+                book_id:
+                  type: string
+                  format: uuid
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                review_text:
+                  type: string
+      responses:
+        '201':
+          description: Review submitted
+
+  /reviews/{reviewId}:
+    put:
+      tags: [Reviews]
+      summary: Update a review
+      parameters:
+        - in: path
+          name: reviewId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Review updated
+    delete:
+      tags: [Reviews]
+      summary: Delete a review
+      parameters:
+        - in: path
+          name: reviewId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Review deleted
+
+  # ── Recommendations ─────────────────────────────────────────────────
+  /recommendations:
+    get:
+      tags: [Recommendations]
+      summary: Get personalized book recommendations
+      responses:
+        '200':
+          description: Recommended books
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Book'
